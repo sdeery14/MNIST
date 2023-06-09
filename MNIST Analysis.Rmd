@@ -1,0 +1,198 @@
+---
+title: "Sean Deery Homework 6 & 7"
+author: "Sean Deery"
+date: "2023-05-27"
+output: pdf_document
+---
+
+```{r}
+# Set the random seed to ensure consistent results
+set.seed(1234)
+```
+
+
+# Load the data
+
+Training data
+
+```{r}
+# Load the training data
+filename <-"Kaggle-digit-train.csv"
+train <- read.csv(filename)
+head(train)
+```
+
+Test Data
+
+```{r}
+# Load the test data
+filename <-"test.csv"
+test <- read.csv(filename, header = TRUE, stringsAsFactors = TRUE)
+head(test)
+```
+
+
+# Data Cleaning
+
+```{r}
+# Convert label into a factor
+train$label<-as.factor(train$label)
+```
+
+
+# EDA
+
+Label Counts
+
+```{r}
+library(ggplot2)
+ggplot(train, aes(label)) + geom_bar()
+```
+
+
+
+# Dimensionality Reduction
+
+Principle Component Analysis
+
+```{r}
+# 
+X <- train[,-1]
+Y <- train[,1]
+trainlabel <- train[,1]
+
+#Reducing Train using PCA
+Xreduced <- X/255
+Xcov <- cov(Xreduced)
+pcaX <- prcomp(Xcov)
+
+# Creating a datatable to store and plot the
+# No of Principal Components vs Cumulative Variance Explained
+vexplained <- as.data.frame((pcaX$sdev^2/sum(pcaX$sdev^2))*100)
+vexplained <- cbind(c(1:784),vexplained,cumsum(vexplained[,1]))
+colnames(vexplained) <- c("No_of_Principal_Components","Individual_Variance_Explained","Cumulative_Variance_Explained")
+
+#Plotting the curve using the datatable obtained
+plot(vexplained$No_of_Principal_Components,vexplained$Cumulative_Variance_Explained, xlim = c(0,100),type='b',pch=16,xlab = "Principal Componets",ylab = "Cumulative Variance Explained",main = 'Principal Components vs Cumulative Variance Explained')
+
+#Datatable to store the summary of the datatable obtained
+vexplainedsummary <- vexplained[seq(0,100,5),]
+vexplainedsummary
+```
+
+```{r}
+# Reduce the pixels down to 25 principle components which explains ~ 97% of the variance
+Xfinal <- as.matrix(Xreduced) %*% pcaX$rotation[,1:25]
+trainfinal <- cbind.data.frame(trainlabel, Xfinal)
+
+
+#Applying PCA to test set
+testreduced <- test/255
+testfinal <- data.frame(as.matrix(testreduced) %*%  pcaX$rotation[,1:25])
+```
+
+
+
+# Models
+- Decision Tree
+- Naive Bayes
+- SVM
+- kNN
+- Random Forest
+
+
+## Decision Tree
+
+```{r}
+# Load the RWeka library
+library(RWeka)
+# Build decision tree model
+m=J48(trainlabel~., data = trainfinal, control=Weka_control(U=FALSE, M=3, C=0.1))
+# Use 10 fold cross-validation to evaluate the model
+e <- evaluate_Weka_classifier(m, numFolds = 3, seed = 1, class = TRUE)
+e
+```
+
+```{r}
+pred=predict(m, newdata=testfinal, type=c("class"))
+id_col=rownames(test)
+newpred=cbind.data.frame(id_col, pred)
+colnames(newpred)=c("ImageId", "Label")
+write.csv(newpred, file="dt_digits_predictions.csv", row.names=FALSE)
+```
+
+
+
+## Naive Bayes
+
+```{r}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+nb_model=NB(trainlabel~., data=trainfinal, control=Weka_control(D=FALSE, K=FALSE))
+e <- evaluate_Weka_classifier(nb_model, numFolds = 3, seed = 1, class = TRUE)
+e
+```
+
+```{r}
+pred=predict(nb_model, newdata=testfinal, type=c("class"))
+id_col=rownames(test)
+newpred=cbind.data.frame(id_col, pred)
+colnames(newpred)=c("ImageId", "Label")
+write.csv(newpred, file="nb_digits_predictions.csv", row.names=FALSE)
+```
+
+## kNN
+```{r}
+knn_model=IBk(trainlabel~., data=trainfinal, control=Weka_control(K=3))
+e <- evaluate_Weka_classifier(knn_model, numFolds = 3, seed = 1, class = TRUE)
+e
+```
+
+```{r}
+pred=predict(knn_model, newdata=testfinal, type=c("class"))
+id_col=rownames(test)
+newpred=cbind.data.frame(id_col, pred)
+colnames(newpred)=c("ImageId", "Label")
+write.csv(newpred, file="knn_digits_predictions.csv", row.names=FALSE)
+```
+
+
+
+## SVM
+
+
+```{r}
+# Build svm model
+# Kernels: PolyKernal and RBF Kernel
+m=SMO(trainlabel~., data = trainfinal, control=Weka_control(C=1, K="weka.classifiers.functions.supportVector.PolyKernel"))
+# Use 10 fold cross-validation to evaluate the model
+e <- evaluate_Weka_classifier(m, numFolds = 3, seed = 1, class = TRUE)
+e
+```
+
+
+```{r}
+pred=predict(m, newdata=testfinal, type=c("class"))
+id_col=rownames(test)
+newpred=cbind.data.frame(id_col, pred)
+colnames(newpred)=c("ImageId", "Label")
+write.csv(newpred, file="svm_digits_predictions.csv", row.names=FALSE)
+```
+
+
+## Random Forest
+
+
+```{r}
+#install.packages("randomForest")
+library(randomForest)
+rfm <- randomForest(trainlabel~., data=trainfinal, ntree=30)
+print(rfm)
+plot(rfm)
+```
+```{r}
+pred=predict(rfm, newdata=testfinal, type=c("class"))
+id_col=rownames(test)
+newpred=cbind.data.frame(id_col, pred)
+colnames(newpred)=c("ImageId", "Label")
+write.csv(newpred, file="rf_digits_predictions.csv", row.names=FALSE)
+```
